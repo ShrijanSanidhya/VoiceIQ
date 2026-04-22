@@ -73,3 +73,16 @@ async def upload_audio(file: UploadFile = File(...)):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Upload failed error: {str(e)}"
         )
+
+# Utility: extract duration via ffprobe after file is saved
+def _get_duration_ffprobe(file_path: str) -> float:
+    import subprocess
+    try:
+        result = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+             "-of", "default=noprint_wrappers=1:nokey=1", file_path],
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=True
+        )
+        return float(result.stdout.decode().strip() or 0.0)
+    except Exception:
+        return 0.0
