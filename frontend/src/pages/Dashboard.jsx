@@ -1,12 +1,10 @@
 import React from 'react';
 
-// Dashboard Page Component
-// This is the main interface displaying transcription, summary, and action items
 const Dashboard = () => {
   return (
-    <div className="p-4">
-      {/* TODO: Compose Dashboard with Waveform, Transcript, SummaryCard, etc. */}
-      <h1>Dashboard Page</h1>
+    <div className="min-h-screen bg-brand-dark pt-32 pb-20 px-6 text-center">
+      <h1 className="text-4xl font-bold">Dashboard Placeholder</h1>
+      <p className="text-brand-gray mt-4">This page will be implemented in the next step.</p>
     </div>
   );
 };

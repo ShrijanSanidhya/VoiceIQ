@@ -4,20 +4,30 @@ module.exports = {
     "./src/**/*.{js,jsx,ts,tsx}",
     "./public/index.html"
   ],
-  darkMode: 'class', // Enable dark theme using class
+  darkMode: 'class',
   theme: {
     extend: {
       colors: {
-        // Custom colors: deep purple + cyan gradient
         brand: {
-          purple: '#4c1d95', // Deep purple
-          cyan: '#06b6d4',   // Cyan
-          dark: '#0f172a',   // Dark background for dark theme
+          purple: '#7C3AED',
+          cyan: '#06B6D4',
+          dark: '#0F0F1A',
+          card: '#1A1A2E',
+          gray: '#94A3B8'
         }
       },
-      backgroundImage: {
-        // Gradient utility class
-        'brand-gradient': 'linear-gradient(to right, #4c1d95, #06b6d4)',
+      fontFamily: {
+        sans: ['Inter', 'sans-serif'],
+      },
+      animation: {
+        'float': 'float 6s ease-in-out infinite',
+        'pulse-slow': 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+      },
+      keyframes: {
+        float: {
+          '0%, 100%': { transform: 'translateY(0)' },
+          '50%': { transform: 'translateY(-20px)' },
+        }
       }
     },
   },
