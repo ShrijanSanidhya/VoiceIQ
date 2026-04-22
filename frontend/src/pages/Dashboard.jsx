@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useLocation, Link } from 'react-router-dom';
+import { useLocation, Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, CheckCircle2, PlayCircle, BarChart3, ListTodo, MessagesSquare, FileText, Settings, Copy, RefreshCw } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, BarChart3, ListTodo, MessagesSquare, FileText, Settings, Copy, RefreshCw, AlertTriangle } from 'lucide-react';
 import { Toaster, toast } from 'react-hot-toast';
 import axios from 'axios';
 
@@ -16,15 +16,20 @@ import Button from '../components/Button';
 
 const Dashboard = () => {
   const location = useLocation();
-  const filename = location.state?.filename || 'Unknown Audio File';
+  const navigate = useNavigate();
+  const filename = location.state?.filename;
+  const originalName = location.state?.originalName || 'Unknown Audio File';
+  const audioUrl = location.state?.audioUrl;
 
   // --- Global State ---
   const [activeTab, setActiveTab] = useState('Summary');
   const [isLive, setIsLive] = useState(true);
   const [activeTime, setActiveTime] = useState(0);
+  const [globalError, setGlobalError] = useState(null);
   
   // --- Data States ---
   const [transcriptData, setTranscriptData] = useState([]);
+  const [fullTranscriptText, setFullTranscriptText] = useState('');
   const [summaryData, setSummaryData] = useState(null);
   const [actionItems, setActionItems] = useState([]);
   const [sentimentData, setSentimentData] = useState(null);
@@ -33,59 +38,113 @@ const Dashboard = () => {
   // --- Loading States ---
   const [isInsightsLoading, setIsInsightsLoading] = useState(true);
 
-  const wsRef = useRef(null);
-
-  // --- Mock WebSocket / API Logic ---
-  // In a real app, this connects to ws://localhost:8000/ws/transcribe
+  // --- Setup Real-Time WebSocket & APIs ---
   useEffect(() => {
-    let mockTimeout;
-    const generateMockTranscript = async () => {
-      const mockSegments = [
-        { speaker: "Speaker 1", start: 0, end: 5, text: "Hello everyone, thanks for joining today's Q3 planning meeting." },
-        { speaker: "Speaker 2", start: 6, end: 12, text: "Hi, glad to be here. I've reviewed the initial budget drafts you sent over." },
-        { speaker: "Speaker 1", start: 13, end: 20, text: "Great. The main goal today is to finalize the marketing allocation. We need to decide if we're pushing more into Q4." }
-      ];
+    if (!filename) {
+      toast.error("No file was uploaded.");
+      navigate('/upload');
+      return;
+    }
 
-      for (let i = 0; i < mockSegments.length; i++) {
-        await new Promise(r => setTimeout(r, 2000));
-        setTranscriptData(prev => [...prev, mockSegments[i]]);
-      }
-      setIsLive(false);
-      fetchInsights();
+    let ws;
+    try {
+      ws = new WebSocket('ws://localhost:8000/ws/transcribe');
+      
+      ws.onopen = () => {
+        setIsLive(true);
+        // Send the file to be processed
+        ws.send(JSON.stringify({ filename }));
+      };
+
+      let accumulatedText = "";
+
+      ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        
+        if (data.error) {
+          setGlobalError(data.error);
+          setIsLive(false);
+          ws.close();
+          return;
+        }
+
+        if (data.status === "completed") {
+          setIsLive(false);
+          // Kick off the Summarize API call using the accumulated text
+          fetchInsights(accumulatedText);
+        } else if (data.segment) {
+          // It's a partial transcript from our generator
+          const newSegment = {
+            speaker: "Speaker 1", // Mocked speaker for now unless whisper handles it
+            start: data.timestamp - 2.0, // Mock start
+            end: data.timestamp,
+            text: data.segment
+          };
+          
+          accumulatedText += data.segment + " ";
+          setFullTranscriptText(accumulatedText);
+          setTranscriptData(prev => [...prev, newSegment]);
+        }
+      };
+
+      ws.onerror = (err) => {
+        console.error("WebSocket error", err);
+        setGlobalError("Lost connection to transcription server.");
+        setIsLive(false);
+      };
+
+      ws.onclose = () => {
+        setIsLive(false);
+      };
+      
+    } catch (err) {
+      setGlobalError(err.message);
+    }
+
+    return () => {
+      if (ws) ws.close();
     };
+  }, [filename, navigate]);
 
-    generateMockTranscript();
-    
-    return () => clearTimeout(mockTimeout);
-  }, []);
-
-  const fetchInsights = async () => {
-    setIsInsightsLoading(true);
-    // Simulate API calls to /summarize
-    setTimeout(() => {
-      setSummaryData({
-        one_line_summary: "The team convened to finalize the Q3 marketing budget allocation.",
-        key_highlights: ["Initial drafts reviewed", "Marketing allocation is the primary bottleneck", "Potential shift of funds to Q4 discussed"],
-        summary: ["Speaker 1 initiated the Q3 planning.", "Speaker 2 confirmed receipt of budget drafts.", "The primary decision pending is Q4 vs Q3 fund allocation."]
-      });
-      setActionItems([
-        "Review the final Q4 marketing numbers by Friday.",
-        "Check the budget draft constraints immediately.",
-        "Schedule follow-up sync next week."
-      ]);
-      setSentimentData({
-        overall: "Positive",
-        score: 0.85,
-        emotions: { happy: 0.7, engaged: 0.8, stressed: 0.2 },
-        sentiment_summary: "The tone is collaborative and focused, with high engagement."
-      });
-      setChaptersData([
-        { title: "Introduction", start_time: "00:00", end_time: "00:12", summary: "Greetings and agenda setting." },
-        { title: "Budget Planning", start_time: "00:13", end_time: "00:20", summary: "Discussion on marketing allocation." }
-      ]);
+  const fetchInsights = async (finalText) => {
+    if (!finalText.trim()) {
       setIsInsightsLoading(false);
+      return;
+    }
+    
+    setIsInsightsLoading(true);
+    try {
+      const response = await axios.post('http://localhost:8000/summarize', {
+        transcript_text: finalText
+      });
+      
+      const { summary, action_items, sentiment, chapters, key_highlights } = response.data;
+      
+      setSummaryData({
+        one_line_summary: summary?.[0] || "Summary generated successfully.",
+        key_highlights: key_highlights || [],
+        summary: summary || []
+      });
+      
+      setActionItems(action_items || []);
+      
+      setSentimentData({
+        overall: sentiment?.label || "Neutral",
+        score: sentiment?.score || 0.5,
+        emotions: { positive: sentiment?.score, neutral: 1 - (sentiment?.score || 1) },
+        sentiment_summary: "Generated based on your transcript."
+      });
+      
+      setChaptersData(chapters || []);
       toast.success('AI Insights Generated!');
-    }, 4000);
+      
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to generate insights.');
+      setGlobalError("Failed to communicate with Summarize API.");
+    } finally {
+      setIsInsightsLoading(false);
+    }
   };
 
   const tabs = [
@@ -107,15 +166,17 @@ const Dashboard = () => {
             <ArrowLeft className="w-5 h-5" />
           </Link>
           <div className="flex items-center gap-3 border-l border-white/10 pl-6">
-            <h1 className="font-bold text-white max-w-[200px] truncate">{filename}</h1>
+            <h1 className="font-bold text-white max-w-[200px] truncate">{originalName}</h1>
             <span className="px-2 py-0.5 rounded text-xs font-bold bg-white/10 text-white">EN</span>
-            <span className="px-2 py-0.5 rounded text-xs bg-white/10 text-brand-gray">12m 45s</span>
-            <span className="px-2 py-0.5 rounded text-xs bg-white/10 text-brand-gray">2 Speakers</span>
           </div>
         </div>
 
         <div className="flex items-center gap-3">
-          {isLive ? (
+          {globalError ? (
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-red-500/10 border border-red-500/20 text-red-400 text-sm font-medium">
+              <AlertTriangle className="w-4 h-4" /> Error Occurred
+            </div>
+          ) : isLive ? (
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-yellow-500/10 border border-yellow-500/20 text-yellow-500 text-sm font-medium">
               <span className="flex h-2 w-2 relative">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-yellow-400 opacity-75"></span>
@@ -130,6 +191,16 @@ const Dashboard = () => {
           )}
         </div>
       </header>
+
+      {globalError && (
+        <div className="bg-red-500/10 border border-red-500 text-red-400 p-4 m-4 rounded-xl flex items-center gap-3 shadow-lg">
+          <AlertTriangle className="w-6 h-6 flex-shrink-0" />
+          <div>
+            <h4 className="font-bold">Pipeline Error</h4>
+            <p className="text-sm opacity-80">{globalError}</p>
+          </div>
+        </div>
+      )}
 
       {/* MAIN CONTENT */}
       <main className="flex-1 flex overflow-hidden p-4 gap-4 pb-24">
@@ -168,24 +239,26 @@ const Dashboard = () => {
                 transition={{ duration: 0.2 }}
                 className="h-full"
               >
-                {activeTab === 'Summary' && <SummaryCard data={summaryData} isLoading={isInsightsLoading} />}
+                {activeTab === 'Summary' && <SummaryCard data={summaryData} isLoading={isInsightsLoading && !globalError} />}
                 
-                {activeTab === 'Actions' && <ActionItems items={actionItems} isLoading={isInsightsLoading} />}
+                {activeTab === 'Actions' && <ActionItems items={actionItems} isLoading={isInsightsLoading && !globalError} />}
                 
-                {activeTab === 'Sentiment' && <SentimentMeter data={sentimentData} isLoading={isInsightsLoading} />}
+                {activeTab === 'Sentiment' && <SentimentMeter data={sentimentData} isLoading={isInsightsLoading && !globalError} />}
                 
                 {activeTab === 'Chapters' && (
                   <div className="space-y-6">
                     <h3 className="text-xl font-bold mb-6">Content Chapters <span className="text-sm font-normal text-brand-gray bg-white/5 px-2 py-1 rounded ml-2">{chaptersData.length}</span></h3>
-                    {isInsightsLoading ? (
+                    {isInsightsLoading && !globalError ? (
                       <div className="space-y-4">{[1,2].map(i => <div key={i} className="h-24 bg-white/5 rounded-xl animate-pulse" />)}</div>
+                    ) : chaptersData.length === 0 ? (
+                      <div className="text-brand-gray text-center p-8">No chapters identified.</div>
                     ) : (
                       <div className="border-l-2 border-brand-purple ml-3 space-y-8 pl-6 relative">
                         {chaptersData.map((chap, idx) => (
                           <div key={idx} className="relative glass p-4 rounded-xl border border-white/5 hover:border-brand-purple/50 cursor-pointer transition-colors group">
                             <span className="absolute -left-[31px] top-4 w-3 h-3 rounded-full bg-brand-cyan shadow-[0_0_10px_rgba(6,182,212,1)]" />
                             <div className="text-xs font-bold text-brand-purple mb-1">{chap.start_time} - {chap.end_time}</div>
-                            <h4 className="font-bold text-white mb-2">{chap.title}</h4>
+                            <h4 className="font-bold text-white mb-2">{chap.topic || chap.title}</h4>
                             <p className="text-sm text-brand-gray">{chap.summary}</p>
                           </div>
                         ))}
@@ -194,7 +267,7 @@ const Dashboard = () => {
                   </div>
                 )}
                 
-                {activeTab === 'Chat' && <ChatBox transcript={transcriptData.map(t => t.text).join(' ')} />}
+                {activeTab === 'Chat' && <ChatBox transcript={fullTranscriptText} />}
               </motion.div>
             </AnimatePresence>
           </div>
@@ -204,12 +277,12 @@ const Dashboard = () => {
       {/* BOTTOM BAR */}
       <div className="fixed bottom-0 left-0 w-full h-20 glass border-t border-white/10 z-20 flex items-center justify-between px-6 shadow-[0_-10px_30px_rgba(0,0,0,0.3)]">
         <div className="w-[45%] pr-6">
-          <Waveform onTimeUpdate={setActiveTime} />
+          <Waveform audioUrl={audioUrl} onTimeUpdate={setActiveTime} />
         </div>
         
         <div className="flex items-center gap-4">
           <Button variant="secondary" className="hidden md:flex" onClick={() => {
-            navigator.clipboard.writeText(transcriptData.map(t => t.text).join(' '));
+            navigator.clipboard.writeText(fullTranscriptText);
             toast.success('Transcript copied!');
           }}>
             <Copy className="w-4 h-4 mr-2" /> Copy Transcript
@@ -222,8 +295,8 @@ const Dashboard = () => {
           </Link>
           
           <ExportButton 
-            filename={filename}
-            transcript={transcriptData.map(t => t.text).join('\n')}
+            filename={originalName}
+            transcript={fullTranscriptText}
             summary={summaryData}
             sentiment={sentimentData}
             chapters={chaptersData}

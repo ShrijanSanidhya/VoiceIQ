@@ -42,19 +42,36 @@ async def transcribe_audio(request: TranscribeRequest):
 async def websocket_transcribe(websocket: WebSocket):
     """
     WebSocket endpoint for real-time streaming transcription.
+    Expects client to send a JSON with {"filename": "..."} first.
     """
     await websocket.accept()
     try:
-        while True:
-            # Receive audio chunk from client
-            data = await websocket.receive_bytes()
+        # Receive filename from client
+        data = await websocket.receive_json()
+        filename = data.get("filename")
+        if not filename:
+            await websocket.send_json({"error": "No filename provided"})
+            await websocket.close()
+            return
             
-            # TODO: Process chunk through real-time whisper_service
+        import os
+        file_path = os.path.join("uploads", filename)
+        if not os.path.exists(file_path):
+             await websocket.send_json({"error": "File not found on server"})
+             await websocket.close()
+             return
+
+        # Import the real whisper service
+        from services.whisper_service import transcribe_stream
+        
+        # Iterate over the generator from whisper_service
+        for chunk in transcribe_stream(file_path):
+            await websocket.send_json(chunk)
             
-            # Send back partial transcript
-            await websocket.send_json({"partial_transcript": "streaming text..."})
+        await websocket.send_json({"status": "completed"})
             
     except WebSocketDisconnect:
         print("Client disconnected from real-time transcription websocket")
     except Exception as e:
+        await websocket.send_json({"error": str(e)})
         await websocket.close(code=1011, reason=str(e))

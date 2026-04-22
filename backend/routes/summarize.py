@@ -27,22 +27,33 @@ class SummarizeResponse(BaseModel):
 @router.post("/summarize", response_model=SummarizeResponse)
 async def summarize_transcript(request: SummarizeRequest):
     """
-    Accepts transcript text and calls gemini_service + langchain_service
+    Accepts transcript text and calls gemini_service
     to generate summary, action items, sentiment, chapters, and highlights.
     """
     try:
-        # TODO: Call gemini_service and langchain_service using request.transcript_text
+        from services.gemini_service import generate_summary, analyze_sentiment, generate_chapters
         
-        # Mocked response
+        # Parallel execution could be used here for speed, but sequential for safety
+        summary_data = generate_summary(request.transcript_text)
+        sentiment_data = analyze_sentiment(request.transcript_text)
+        # Pass empty timestamps for now or just the text
+        chapters_data = generate_chapters(request.transcript_text, [])
+        
         return SummarizeResponse(
-            summary=["First bullet point of summary", "Second bullet point of summary"],
-            action_items=["Follow up with team", "Review documentation"],
-            sentiment=SentimentData(label="positive", score=0.92),
+            summary=summary_data.get("summary", []),
+            action_items=summary_data.get("action_items", []),
+            sentiment=SentimentData(
+                label=sentiment_data.get("overall", "neutral"),
+                score=sentiment_data.get("score", 0.0)
+            ),
             chapters=[
-                ChapterData(topic="Introduction", start_time=0.0, end_time=60.0),
-                ChapterData(topic="Main Discussion", start_time=60.0, end_time=300.0)
+                ChapterData(
+                    topic=c.get("title", ""),
+                    start_time=float(c.get("start_time", "0.0").replace(":", ".")) if isinstance(c.get("start_time"), str) else 0.0,
+                    end_time=float(c.get("end_time", "0.0").replace(":", ".")) if isinstance(c.get("end_time"), str) else 0.0
+                ) for c in chapters_data
             ],
-            key_highlights=["Highlight 1", "Highlight 2", "Highlight 3", "Highlight 4", "Highlight 5"]
+            key_highlights=summary_data.get("key_highlights", [])
         )
     except Exception as e:
         raise HTTPException(

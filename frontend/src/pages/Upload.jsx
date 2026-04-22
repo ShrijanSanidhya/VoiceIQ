@@ -3,6 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useDropzone } from 'react-dropzone';
 import { UploadCloud, FileAudio, Play, X, ArrowLeft } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
+import axios from 'axios';
+import toast from 'react-hot-toast';
 import Button from '../components/Button';
 import ProgressBar from '../components/ProgressBar';
 
@@ -27,22 +29,39 @@ const Upload = () => {
     maxFiles: 1
   });
 
-  const handleUpload = () => {
+  const handleUpload = async () => {
     if (!file) return;
     setUploading(true);
+    setProgress(0);
     
-    // Simulate upload progress
-    let p = 0;
-    const interval = setInterval(() => {
-      p += 5;
-      setProgress(p);
-      if (p >= 100) {
-        clearInterval(interval);
-        setTimeout(() => {
-          navigate('/dashboard', { state: { filename: file.name } });
-        }, 500);
-      }
-    }, 150);
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    try {
+      const res = await axios.post('http://localhost:8000/upload', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        onUploadProgress: (progressEvent) => {
+          const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+          setProgress(percentCompleted);
+        }
+      });
+      
+      const audioUrl = URL.createObjectURL(file);
+      setTimeout(() => {
+        navigate('/dashboard', { 
+          state: { 
+            filename: res.data.filename, 
+            originalName: file.name,
+            audioUrl: audioUrl 
+          } 
+        });
+      }, 500);
+    } catch (err) {
+      console.error(err);
+      toast.error(err.response?.data?.detail || 'Upload failed. Is the backend running?');
+      setUploading(false);
+      setProgress(0);
+    }
   };
 
   const removeFile = (e) => {
