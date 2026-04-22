@@ -1,11 +1,46 @@
-node_modules/
+# ========================
+# VoiceIQ — .gitignore
+# ========================
+
+# Python
 venv/
 .venv/
-.env
-uploads/
-*.mp3
-*.wav
-*.mp4
 __pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Environment variables (never commit secrets!)
+.env
+!.env.example
+
+# Uploaded files (can be large)
+backend/uploads/
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# React build
 build/
 dist/
+
+# MacOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+
+# Whisper model cache
+*.pt
