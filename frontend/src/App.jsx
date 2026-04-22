@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import Home from './pages/Home';
 import Upload from './pages/Upload';
 import Dashboard from './pages/Dashboard';
+import NotFound from './pages/NotFound';
 import Navbar from './components/Navbar';
 
 const PageWrapper = ({ children }) => {
@@ -29,6 +30,7 @@ const AnimatedRoutes = () => {
         <Route path="/" element={<PageWrapper><Home /></PageWrapper>} />
         <Route path="/upload" element={<PageWrapper><Upload /></PageWrapper>} />
         <Route path="/dashboard" element={<PageWrapper><Dashboard /></PageWrapper>} />
+        <Route path="*" element={<NotFound />} />
       </Routes>
     </AnimatePresence>
   );
