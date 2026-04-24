@@ -38,6 +38,9 @@ const Dashboard = () => {
   // --- Loading States ---
   const [isInsightsLoading, setIsInsightsLoading] = useState(true);
 
+  // --- Refs ---
+  const wsStarted = useRef(false); // Prevent double WebSocket connections
+
   // --- Setup Real-Time WebSocket & APIs ---
   useEffect(() => {
     if (!filename) {
@@ -46,7 +49,12 @@ const Dashboard = () => {
       return;
     }
 
+    // Guard against double-mount / double connection
+    if (wsStarted.current) return;
+    wsStarted.current = true;
+
     let ws;
+    let isCompleted = false; // Track if transcription finished successfully
     try {
       ws = new WebSocket('ws://localhost:8000/ws/transcribe');
       
@@ -69,6 +77,7 @@ const Dashboard = () => {
         }
 
         if (data.status === "completed") {
+          isCompleted = true; // Mark as successfully completed
           setIsLive(false);
           // Kick off the Summarize API call using the accumulated text
           fetchInsights(accumulatedText);
@@ -89,7 +98,11 @@ const Dashboard = () => {
 
       ws.onerror = (err) => {
         console.error("WebSocket error", err);
-        setGlobalError("Lost connection to transcription server.");
+        // Only show error if transcription did NOT complete successfully
+        // A normal server-side close after completion can trigger onerror in some browsers
+        if (!isCompleted) {
+          setGlobalError("Lost connection to transcription server.");
+        }
         setIsLive(false);
       };
 
@@ -140,8 +153,13 @@ const Dashboard = () => {
       
     } catch (err) {
       console.error(err);
-      toast.error('Failed to generate insights.');
-      setGlobalError("Failed to communicate with Summarize API.");
+      const detail = err.response?.data?.detail || err.message || 'Failed to generate insights.';
+      const isQuota = detail.includes('QUOTA_EXCEEDED') || detail.includes('quota') || detail.includes('rate limit');
+      const userMsg = isQuota
+        ? '⚠️ Gemini API quota exceeded. Get a new API key at aistudio.google.com'
+        : detail;
+      toast.error(userMsg, { duration: 8000 });
+      setGlobalError(isQuota ? 'Gemini API quota exceeded. Get a fresh key at aistudio.google.com and update backend/.env' : detail);
     } finally {
       setIsInsightsLoading(false);
     }

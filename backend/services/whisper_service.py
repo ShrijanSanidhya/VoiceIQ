@@ -1,6 +1,7 @@
 import os
 import subprocess
 import logging
+import threading
 import warnings
 from typing import Dict, List, Any, Generator
 
@@ -26,6 +27,9 @@ try:
 except Exception as e:
     logger.error(f"Failed to load Whisper model: {e}")
     whisper_model = None
+
+# Lock to ensure Whisper model is only called by one thread at a time (not thread-safe)
+_whisper_lock = threading.Lock()
 
 # Constants for validation
 MIN_DURATION_SEC = 3.0
@@ -59,7 +63,7 @@ def preprocess_audio(file_path: str) -> str:
         command = [
             "ffmpeg", "-y", "-i", file_path,
             "-vn", "-ac", "1", "-ar", "16000",
-            "-af", "silenceremove=start_periods=1:start_duration=0.5:start_threshold=-50dB,loudnorm",
+            "-af", "loudnorm",
             output_path
         ]
         
@@ -86,7 +90,7 @@ def _validate_audio(file_path: str) -> float:
              "format=duration", "-of",
              "default=noprint_wrappers=1:nokey=1", file_path],
             stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
+            stderr=subprocess.PIPE,
             check=True
         )
         duration_str = result.stdout.decode().strip()
@@ -122,8 +126,10 @@ def transcribe_audio(file_path: str) -> Dict[str, Any]:
         raise RuntimeError("Whisper model is not loaded.")
 
     try:
-        # Transcribe with word_timestamps=True to get word-level precision
-        result = whisper_model.transcribe(processed_path, word_timestamps=True)
+        # Acquire lock - Whisper model is not thread-safe
+        with _whisper_lock:
+            # Transcribe with word_timestamps=True to get word-level precision
+            result = whisper_model.transcribe(processed_path, word_timestamps=True)
         
         language = result.get("language", "unknown")
         # Validate language is supported (en or hi)
@@ -179,9 +185,11 @@ def transcribe_stream(file_path: str) -> Generator[Dict[str, Any], None, None]:
     processed_path = preprocess_audio(file_path)
     
     try:
-        # Note: True local streaming with standard whisper is blocking. 
+        # Note: True local streaming with standard whisper is blocking.
         # Here we simulate real-time yield by iterating over transcribed segments.
-        result = whisper_model.transcribe(processed_path)
+        # Acquire lock - Whisper model is not thread-safe
+        with _whisper_lock:
+            result = whisper_model.transcribe(processed_path)
         segments = result.get("segments", [])
         total_segments = len(segments)
         

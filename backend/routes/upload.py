@@ -54,8 +54,8 @@ async def upload_audio(file: UploadFile = File(...)):
         with open(file_path, "wb") as f:
             f.write(file_content)
             
-        # Mock duration for now (will extract using audio processing library later)
-        duration = 0.0
+        # Extract true duration via ffprobe after file is saved
+        duration = _get_duration_ffprobe(file_path)
         
         return UploadResponse(
             filename=unique_filename,
@@ -81,7 +81,7 @@ def _get_duration_ffprobe(file_path: str) -> float:
         result = subprocess.run(
             ["ffprobe", "-v", "error", "-show_entries", "format=duration",
              "-of", "default=noprint_wrappers=1:nokey=1", file_path],
-            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=True
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True
         )
         return float(result.stdout.decode().strip() or 0.0)
     except Exception:

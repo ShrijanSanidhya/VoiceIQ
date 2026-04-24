@@ -22,15 +22,27 @@ async def transcribe_audio(request: TranscribeRequest):
     Returns transcript text, language, duration, timestamps, and speakers.
     """
     try:
-        # TODO: Call whisper_service to transcribe the provided request.filename
+        import os
+        from services.whisper_service import transcribe_audio as whisper_transcribe, detect_speakers
         
-        # Mocked response
+        from fastapi.concurrency import run_in_threadpool
+        
+        file_path = os.path.join("uploads", request.filename)
+        if not os.path.exists(file_path):
+            raise HTTPException(status_code=404, detail="File not found on server")
+            
+        transcription_data = await run_in_threadpool(whisper_transcribe, file_path)
+        speakers_data = await run_in_threadpool(detect_speakers, file_path)
+        
+        # Extract unique speakers
+        speakers_list = list(set([s.get("speaker", "Unknown") for s in speakers_data]))
+        
         return TranscribeResponse(
-            transcript_text="This is a mocked transcript text.",
-            language_detected="en",
-            duration=120.5,
-            timestamps_list=[{"start": 0.0, "end": 2.0, "text": "This is a"}],
-            speakers_list=["Speaker 1"]
+            transcript_text=transcription_data.get("transcript", ""),
+            language_detected=transcription_data.get("language", "unknown"),
+            duration=transcription_data.get("duration", 0.0),
+            timestamps_list=transcription_data.get("timestamps", []),
+            speakers_list=speakers_list
         )
     except Exception as e:
         raise HTTPException(
@@ -63,12 +75,23 @@ async def websocket_transcribe(websocket: WebSocket):
 
         # Import the real whisper service
         from services.whisper_service import transcribe_stream
+        from fastapi.concurrency import run_in_threadpool
+        import asyncio
         
-        # Iterate over the generator from whisper_service
-        for chunk in transcribe_stream(file_path):
+        # Run the blocking transcription in a thread pool so it doesn't freeze the async event loop
+        def get_chunks():
+            return list(transcribe_stream(file_path))
+            
+        chunks = await run_in_threadpool(get_chunks)
+        
+        # Stream chunks back to client
+        for chunk in chunks:
             await websocket.send_json(chunk)
+            await asyncio.sleep(0.1)  # Simulate streaming delay
             
         await websocket.send_json({"status": "completed"})
+        # Explicitly close with normal code 1000 so client receives onclose, not onerror
+        await websocket.close(code=1000)
             
     except WebSocketDisconnect:
         print("Client disconnected from real-time transcription websocket")

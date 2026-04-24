@@ -31,29 +31,26 @@ async def summarize_transcript(request: SummarizeRequest):
     to generate summary, action items, sentiment, chapters, and highlights.
     """
     try:
-        from services.gemini_service import generate_summary, analyze_sentiment, generate_chapters
+        from services.gemini_service import generate_all_insights
         
-        # Parallel execution could be used here for speed, but sequential for safety
-        summary_data = generate_summary(request.transcript_text)
-        sentiment_data = analyze_sentiment(request.transcript_text)
-        # Pass empty timestamps for now or just the text
-        chapters_data = generate_chapters(request.transcript_text, [])
+        # Call a single function to avoid rate limits
+        data = generate_all_insights(request.transcript_text, [])
         
         return SummarizeResponse(
-            summary=summary_data.get("summary", []),
-            action_items=summary_data.get("action_items", []),
+            summary=data.get("summary", []),
+            action_items=data.get("action_items", []),
             sentiment=SentimentData(
-                label=sentiment_data.get("overall", "neutral"),
-                score=sentiment_data.get("score", 0.0)
+                label=data.get("sentiment", {}).get("overall", "neutral"),
+                score=data.get("sentiment", {}).get("score", 0.0)
             ),
             chapters=[
                 ChapterData(
                     topic=c.get("title", ""),
                     start_time=float(c.get("start_time", "0.0").replace(":", ".")) if isinstance(c.get("start_time"), str) else 0.0,
                     end_time=float(c.get("end_time", "0.0").replace(":", ".")) if isinstance(c.get("end_time"), str) else 0.0
-                ) for c in chapters_data
+                ) for c in data.get("chapters", [])
             ],
-            key_highlights=summary_data.get("key_highlights", [])
+            key_highlights=data.get("key_highlights", [])
         )
     except Exception as e:
         raise HTTPException(

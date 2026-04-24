@@ -9,10 +9,15 @@ const Waveform = ({ audioUrl, onTimeUpdate }) => {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
 
+  const onTimeUpdateRef = useRef(onTimeUpdate);
+  useEffect(() => {
+    onTimeUpdateRef.current = onTimeUpdate;
+  }, [onTimeUpdate]);
+
   useEffect(() => {
     if (!containerRef.current) return;
 
-    wavesurferRef.current = WaveSurfer.create({
+    const ws = WaveSurfer.create({
       container: containerRef.current,
       waveColor: '#4c1d95',
       progressColor: '#06b6d4',
@@ -23,27 +28,37 @@ const Waveform = ({ audioUrl, onTimeUpdate }) => {
       height: 60,
       normalize: true,
     });
+    wavesurferRef.current = ws;
 
-    if (audioUrl) {
-      wavesurferRef.current.load(audioUrl);
-    }
-
-    wavesurferRef.current.on('ready', () => {
-      setDuration(wavesurferRef.current.getDuration());
+    ws.on('ready', () => {
+      setDuration(ws.getDuration());
     });
 
-    wavesurferRef.current.on('audioprocess', () => {
-      const time = wavesurferRef.current.getCurrentTime();
+    ws.on('audioprocess', () => {
+      const time = ws.getCurrentTime();
       setCurrentTime(time);
-      if (onTimeUpdate) onTimeUpdate(time);
+      if (onTimeUpdateRef.current) onTimeUpdateRef.current(time);
     });
 
     return () => {
-      if (wavesurferRef.current) {
-        wavesurferRef.current.destroy();
+      try {
+        ws.destroy();
+      } catch (e) {
+        console.error("WaveSurfer destroy error:", e);
       }
     };
-  }, [audioUrl, onTimeUpdate]);
+  }, []);
+
+  useEffect(() => {
+    if (wavesurferRef.current && audioUrl) {
+      wavesurferRef.current.load(audioUrl).catch(e => {
+        // Ignore AbortError caused by rapid unmounting or rapid audioUrl changes
+        if (e.name !== 'AbortError') {
+          console.error("WaveSurfer load error:", e);
+        }
+      });
+    }
+  }, [audioUrl]);
 
   const togglePlay = () => {
     if (!wavesurferRef.current) return;
