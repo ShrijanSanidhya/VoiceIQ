@@ -38,8 +38,9 @@ const Upload = () => {
     formData.append('file', file);
     
     try {
+      // DO NOT set Content-Type manually for FormData - axios must auto-generate
+      // the multipart/form-data boundary header or the server can't parse it
       const res = await axios.post('http://localhost:8000/upload', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
         onUploadProgress: (progressEvent) => {
           const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
           setProgress(percentCompleted);

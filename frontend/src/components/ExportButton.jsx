@@ -4,7 +4,7 @@ import axios from 'axios';
 import toast from 'react-hot-toast';
 import Button from './Button';
 
-const ExportButton = ({ filename, transcript, summary, sentiment, chapters, chatHistory }) => {
+const ExportButton = ({ filename, transcript, summary, sentiment, chapters, speakers, chatHistory }) => {
   const [isExporting, setIsExporting] = useState(false);
 
   const handleExport = async () => {
@@ -24,7 +24,7 @@ const ExportButton = ({ filename, transcript, summary, sentiment, chapters, chat
         summary: summary || {},
         sentiment: sentiment || {},
         chapters: chapters || [],
-        speakers: [], // Mocked for now, real app pulls from pyannote array
+        speakers: speakers || [],
         chat_history: chatHistory || []
       }, { responseType: 'blob' }); // Important for receiving binary PDF file
 

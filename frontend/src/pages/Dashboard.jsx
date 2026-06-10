@@ -34,9 +34,28 @@ const Dashboard = () => {
   const [actionItems, setActionItems] = useState([]);
   const [sentimentData, setSentimentData] = useState(null);
   const [chaptersData, setChaptersData] = useState([]);
+  const [seekTime, setSeekTime] = useState(null);
+  const [chatHistory, setChatHistory] = useState([]);
   
   // --- Loading States ---
   const [isInsightsLoading, setIsInsightsLoading] = useState(true);
+
+  const formatTime = (time) => {
+    if (time === undefined || time === null) return '00:00';
+    const mins = Math.floor(time / 60);
+    const secs = Math.floor(time % 60);
+    return `${mins < 10 ? '0' : ''}${mins}:${secs < 10 ? '0' : ''}${secs}`;
+  };
+
+  const handleRenameSpeaker = (oldName, newName) => {
+    if (!newName.trim()) return;
+    setTranscriptData(prev => prev.map(seg => {
+      if (seg.speaker === oldName) {
+        return { ...seg, speaker: newName };
+      }
+      return seg;
+    }));
+  };
 
   // --- Refs ---
   const wsStarted = useRef(false); // Prevent double WebSocket connections
@@ -84,9 +103,9 @@ const Dashboard = () => {
         } else if (data.segment) {
           // It's a partial transcript from our generator
           const newSegment = {
-            speaker: "Speaker 1", // Mocked speaker for now unless whisper handles it
-            start: data.timestamp - 2.0, // Mock start
-            end: data.timestamp,
+            speaker: data.speaker || "Speaker 1",
+            start: data.start !== undefined ? data.start : (data.timestamp ? data.timestamp - 2.0 : 0.0),
+            end: data.end !== undefined ? data.end : (data.timestamp ? data.timestamp : 0.0),
             text: data.segment
           };
           
@@ -224,7 +243,13 @@ const Dashboard = () => {
       <main className="flex-1 flex overflow-hidden p-4 gap-4 pb-24">
         {/* LEFT PANEL: Transcript */}
         <div className="w-[45%] h-full flex flex-col">
-          <Transcript transcriptData={transcriptData} isLive={isLive} activeTime={activeTime} />
+          <Transcript 
+            transcriptData={transcriptData} 
+            isLive={isLive} 
+            activeTime={activeTime} 
+            onSegmentClick={setSeekTime}
+            onRenameSpeaker={handleRenameSpeaker}
+          />
         </div>
 
         {/* RIGHT PANEL: Insights */}
@@ -273,9 +298,13 @@ const Dashboard = () => {
                     ) : (
                       <div className="border-l-2 border-brand-purple ml-3 space-y-8 pl-6 relative">
                         {chaptersData.map((chap, idx) => (
-                          <div key={idx} className="relative glass p-4 rounded-xl border border-white/5 hover:border-brand-purple/50 cursor-pointer transition-colors group">
+                          <div 
+                            key={idx} 
+                            onClick={() => setSeekTime(chap.start_time)}
+                            className="relative glass p-4 rounded-xl border border-white/5 hover:border-brand-purple/50 cursor-pointer transition-colors group"
+                          >
                             <span className="absolute -left-[31px] top-4 w-3 h-3 rounded-full bg-brand-cyan shadow-[0_0_10px_rgba(6,182,212,1)]" />
-                            <div className="text-xs font-bold text-brand-purple mb-1">{chap.start_time} - {chap.end_time}</div>
+                            <div className="text-xs font-bold text-brand-purple mb-1">{formatTime(chap.start_time)} - {formatTime(chap.end_time)}</div>
                             <h4 className="font-bold text-white mb-2">{chap.topic || chap.title}</h4>
                             <p className="text-sm text-brand-gray">{chap.summary}</p>
                           </div>
@@ -285,7 +314,13 @@ const Dashboard = () => {
                   </div>
                 )}
                 
-                {activeTab === 'Chat' && <ChatBox transcript={fullTranscriptText} />}
+                {activeTab === 'Chat' && (
+                  <ChatBox 
+                    transcript={fullTranscriptText} 
+                    chatHistory={chatHistory} 
+                    setChatHistory={setChatHistory} 
+                  />
+                )}
               </motion.div>
             </AnimatePresence>
           </div>
@@ -295,7 +330,7 @@ const Dashboard = () => {
       {/* BOTTOM BAR */}
       <div className="fixed bottom-0 left-0 w-full h-20 glass border-t border-white/10 z-20 flex items-center justify-between px-6 shadow-[0_-10px_30px_rgba(0,0,0,0.3)]">
         <div className="w-[45%] pr-6">
-          <Waveform audioUrl={audioUrl} onTimeUpdate={setActiveTime} />
+          <Waveform audioUrl={audioUrl} onTimeUpdate={setActiveTime} seekTime={seekTime} />
         </div>
         
         <div className="flex items-center gap-4">
@@ -318,7 +353,8 @@ const Dashboard = () => {
             summary={summaryData}
             sentiment={sentimentData}
             chapters={chaptersData}
-            chatHistory={[]}
+            speakers={transcriptData}
+            chatHistory={chatHistory}
           />
         </div>
       </div>

@@ -25,7 +25,7 @@ if not API_KEY:
     logger.error("API key missing error: GEMINI_API_KEY is not set.")
 
 # Use Gemini Flash as the LLM (fast, free via Google AI Studio)
-llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=0.3)
+llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=0.3, google_api_key=API_KEY)
 
 # Use HuggingFace embeddings (100% free, runs locally)
 # sentence-transformers/all-MiniLM-L6-v2 is an excellent small/fast model.

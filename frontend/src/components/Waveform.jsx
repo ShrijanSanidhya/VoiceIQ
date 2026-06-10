@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import WaveSurfer from 'wavesurfer.js';
 import { Play, Pause } from 'lucide-react';
 
-const Waveform = ({ audioUrl, onTimeUpdate }) => {
+const Waveform = ({ audioUrl, onTimeUpdate, seekTime }) => {
   const containerRef = useRef(null);
   const wavesurferRef = useRef(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -59,6 +59,15 @@ const Waveform = ({ audioUrl, onTimeUpdate }) => {
       });
     }
   }, [audioUrl]);
+
+  useEffect(() => {
+    if (wavesurferRef.current && typeof seekTime === 'number') {
+      const duration = wavesurferRef.current.getDuration();
+      if (duration > 0) {
+        wavesurferRef.current.seekTo(seekTime / duration);
+      }
+    }
+  }, [seekTime]);
 
   const togglePlay = () => {
     if (!wavesurferRef.current) return;

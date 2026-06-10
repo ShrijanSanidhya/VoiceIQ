@@ -3,8 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Send, Sparkles } from 'lucide-react';
 import axios from 'axios';
 
-const ChatBox = ({ transcript }) => {
-  const [messages, setMessages] = useState([]);
+const ChatBox = ({ transcript, chatHistory = [], setChatHistory }) => {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef(null);
@@ -21,32 +20,35 @@ const ChatBox = ({ transcript }) => {
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages, isLoading]);
+  }, [chatHistory, isLoading]);
 
   const handleSend = async (text = input) => {
     if (!text.trim() || !transcript) return;
     
     const userMsg = { role: 'user', content: text };
-    setMessages(prev => [...prev, userMsg]);
+    
+    // Optimistically add user message
+    setChatHistory(prev => [...prev, userMsg]);
     setInput('');
     setIsLoading(true);
 
     try {
-      // Build proper history array per your langchain service
-      const history = messages.map(m => ({
-        role: m.role === 'user' ? 'human' : 'ai',
+      // Build history for the chat API, ensuring roles are exactly 'user' and 'assistant'
+      // We also include the current optimistic message
+      const historyPayload = [...chatHistory, userMsg].map(m => ({
+        role: m.role,
         content: m.content
       }));
 
       const res = await axios.post('http://localhost:8000/chat', {
         question: text,
         transcript: transcript,
-        chat_history: history
+        chat_history: historyPayload
       });
 
-      setMessages(prev => [...prev, { role: 'ai', content: res.data.answer }]);
+      setChatHistory(prev => [...prev, { role: 'assistant', content: res.data.answer }]);
     } catch (err) {
-      setMessages(prev => [...prev, { role: 'ai', content: "Sorry, I encountered an error answering that question." }]);
+      setChatHistory(prev => [...prev, { role: 'assistant', content: "Sorry, I encountered an error answering that question." }]);
     } finally {
       setIsLoading(false);
     }
@@ -55,7 +57,7 @@ const ChatBox = ({ transcript }) => {
   return (
     <div className="flex flex-col h-[calc(100vh-250px)]">
       <div className="flex-1 overflow-y-auto space-y-6 pb-6 pr-2">
-        {messages.length === 0 && (
+        {chatHistory.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full text-center space-y-6">
             <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-brand-purple/20 to-brand-cyan/20 flex items-center justify-center text-brand-cyan">
               <Sparkles className="w-8 h-8" />
@@ -79,7 +81,7 @@ const ChatBox = ({ transcript }) => {
         )}
 
         <AnimatePresence>
-          {messages.map((msg, idx) => (
+          {chatHistory.map((msg, idx) => (
             <motion.div 
               key={idx}
               initial={{ opacity: 0, y: 10 }}
@@ -87,9 +89,9 @@ const ChatBox = ({ transcript }) => {
               className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
             >
               <div className={`max-w-[85%] rounded-2xl p-4 ${msg.role === 'user' ? 'bg-gradient-to-br from-brand-purple to-[#5b21b6] text-white rounded-br-none' : 'glass border border-white/5 rounded-bl-none'}`}>
-                {msg.role === 'ai' && <div className="text-xs font-bold text-brand-cyan mb-1 flex items-center gap-1"><Sparkles className="w-3 h-3"/> AI Assistant</div>}
+                {msg.role === 'assistant' && <div className="text-xs font-bold text-brand-cyan mb-1 flex items-center gap-1"><Sparkles className="w-3 h-3"/> AI Assistant</div>}
                 <div className="leading-relaxed text-sm md:text-base whitespace-pre-wrap">{msg.content}</div>
-                {msg.role === 'ai' && (
+                {msg.role === 'assistant' && (
                   <div className="mt-3 pt-3 border-t border-white/10 text-xs text-brand-gray">
                     Source: Context analyzed from transcript via LangChain
                   </div>

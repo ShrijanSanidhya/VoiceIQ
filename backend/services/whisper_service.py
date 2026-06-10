@@ -32,7 +32,7 @@ except Exception as e:
 _whisper_lock = threading.Lock()
 
 # Constants for validation
-MIN_DURATION_SEC = 3.0
+MIN_DURATION_SEC = 0.5
 MAX_DURATION_SEC = 7200.0 # 2 hours
 # Supported languages for validation purposes
 SUPPORTED_LANGUAGES = {"en", "hi"} 
@@ -132,9 +132,6 @@ def transcribe_audio(file_path: str) -> Dict[str, Any]:
             result = whisper_model.transcribe(processed_path, word_timestamps=True)
         
         language = result.get("language", "unknown")
-        # Validate language is supported (en or hi)
-        if language not in SUPPORTED_LANGUAGES and language != "unknown":
-            raise ValueError("Language not supported")
         
         timestamps = []
         words_list = []
@@ -198,7 +195,8 @@ def transcribe_stream(file_path: str) -> Generator[Dict[str, Any], None, None]:
             
             yield {
                 "segment": segment["text"].strip(),
-                "timestamp": segment["end"],
+                "start": segment["start"],
+                "end": segment["end"],
                 "progress": progress
             }
             
@@ -235,8 +233,7 @@ def detect_language(file_path: str) -> str:
         
         logger.info(f"Detected language: {detected_lang}")
         
-        if detected_lang not in SUPPORTED_LANGUAGES:
-            raise ValueError("Language not supported")
+        # Allow all languages detected
             
         return detected_lang
         

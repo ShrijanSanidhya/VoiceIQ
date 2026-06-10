@@ -3,8 +3,10 @@ import { motion } from 'framer-motion';
 import { Search } from 'lucide-react';
 import LoadingSpinner from './LoadingSpinner';
 
-const Transcript = ({ transcriptData = [], isLive = false, activeTime = 0 }) => {
+const Transcript = ({ transcriptData = [], isLive = false, activeTime = 0, onSegmentClick, onRenameSpeaker }) => {
   const [searchTerm, setSearchTerm] = useState('');
+  const [editingSpeakerIdx, setEditingSpeakerIdx] = useState(null);
+  const [editingSpeakerValue, setEditingSpeakerValue] = useState('');
   const scrollRef = useRef(null);
 
   // Auto-scroll logic
@@ -72,18 +74,59 @@ const Transcript = ({ transcriptData = [], isLive = false, activeTime = 0 }) => 
         ) : (
           transcriptData.map((segment, idx) => {
             const isActive = activeTime >= segment.start && activeTime <= segment.end;
+            const isEditingThisSpeaker = editingSpeakerIdx === idx;
             
             return (
               <motion.div 
                 key={idx}
+                onClick={() => {
+                  if (editingSpeakerIdx === null && onSegmentClick) {
+                    onSegmentClick(segment.start);
+                  }
+                }}
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                className={`p-4 rounded-xl transition-all duration-300 border ${isActive ? 'border-brand-cyan/50 glow-cyan bg-brand-cyan/5' : 'border-white/5 hover:border-brand-purple/30 hover:bg-white/[0.02]'}`}
+                className={`p-4 rounded-xl transition-all duration-300 border cursor-pointer ${isActive ? 'border-brand-cyan/50 glow-cyan bg-brand-cyan/5' : 'border-white/5 hover:border-brand-purple/30 hover:bg-white/[0.02]'}`}
               >
                 <div className="flex items-center gap-3 mb-2 text-sm font-medium">
-                  <span className={`flex items-center gap-1 ${getSpeakerColor(segment.speaker)}`}>
-                    🎙️ {segment.speaker}
-                  </span>
+                  {isEditingThisSpeaker ? (
+                    <input
+                      type="text"
+                      value={editingSpeakerValue}
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={(e) => setEditingSpeakerValue(e.target.value)}
+                      onBlur={() => {
+                        if (editingSpeakerValue.trim() && editingSpeakerValue !== segment.speaker) {
+                          onRenameSpeaker && onRenameSpeaker(segment.speaker, editingSpeakerValue.trim());
+                        }
+                        setEditingSpeakerIdx(null);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          if (editingSpeakerValue.trim() && editingSpeakerValue !== segment.speaker) {
+                            onRenameSpeaker && onRenameSpeaker(segment.speaker, editingSpeakerValue.trim());
+                          }
+                          setEditingSpeakerIdx(null);
+                        } else if (e.key === 'Escape') {
+                          setEditingSpeakerIdx(null);
+                        }
+                      }}
+                      className="bg-brand-dark border border-brand-purple rounded px-2 py-0.5 text-xs text-white focus:outline-none focus:border-brand-cyan"
+                      autoFocus
+                    />
+                  ) : (
+                    <span 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditingSpeakerIdx(idx);
+                        setEditingSpeakerValue(segment.speaker);
+                      }}
+                      title="Click to rename speaker"
+                      className={`flex items-center gap-1 hover:text-white transition-colors cursor-edit ${getSpeakerColor(segment.speaker)}`}
+                    >
+                      🎙️ {segment.speaker}
+                    </span>
+                  )}
                   <span className="text-brand-gray text-xs">
                     [{formatTime(segment.start)} - {formatTime(segment.end)}]
                   </span>

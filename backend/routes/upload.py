@@ -27,12 +27,33 @@ async def upload_audio(file: UploadFile = File(...)):
     Saves file to uploads/ folder with a unique filename.
     """
     try:
-        # Validate file extension
-        _, ext = os.path.splitext(file.filename)
-        if ext.lower() not in ALLOWED_EXTENSIONS:
+        # Validate file extension, also accept by MIME type as fallback
+        _, ext = os.path.splitext(file.filename or '')
+        ext = ext.lower()
+        
+        # MIME type to extension mapping fallback
+        MIME_EXT_MAP = {
+            'audio/mpeg': '.mp3',
+            'audio/mp3': '.mp3',
+            'audio/wav': '.wav',
+            'audio/x-wav': '.wav',
+            'audio/wave': '.wav',
+            'audio/x-m4a': '.m4a',
+            'audio/mp4': '.m4a',
+            'video/mp4': '.mp4',
+            'audio/ogg': '.wav',
+            'audio/webm': '.wav',
+        }
+        
+        if not ext or ext not in ALLOWED_EXTENSIONS:
+            # Try to infer extension from MIME type
+            content_type = file.content_type or ''
+            ext = MIME_EXT_MAP.get(content_type.split(';')[0].strip(), ext)
+
+        if ext not in ALLOWED_EXTENSIONS:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Wrong file format error. Allowed: {', '.join(ALLOWED_EXTENSIONS)}"
+                detail=f"Wrong file format error. Allowed: {', '.join(ALLOWED_EXTENSIONS)}. Got filename='{file.filename}', content_type='{file.content_type}'"
             )
         
         # Read file contents

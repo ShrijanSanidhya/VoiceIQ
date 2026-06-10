@@ -1,16 +1,33 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Mic } from 'lucide-react';
 import Button from './Button';
 
 const Navbar = () => {
   const [scrolled, setScrolled] = useState(false);
+  const location = useLocation();
+  const navigate = useNavigate();
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 20);
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
+
+  const scrollToSection = (id) => {
+    if (location.pathname !== '/') {
+      // Navigate home first, then scroll after page loads
+      navigate('/', { state: { scrollTo: id } });
+    } else {
+      const el = document.getElementById(id);
+      if (el) el.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
+  const navLinks = [
+    { label: 'How it Works', sectionId: 'how-it-works' },
+    { label: 'Features', sectionId: 'features' },
+  ];
 
   return (
     <nav className={`fixed top-0 w-full z-50 transition-all duration-300 ${scrolled ? 'glass py-3' : 'bg-transparent py-5'}`}>
@@ -25,9 +42,15 @@ const Navbar = () => {
         </Link>
         
         <div className="hidden md:flex items-center gap-8 text-sm font-medium text-brand-gray">
-          <Link to="/" className="hover:text-white transition-colors">How it Works</Link>
-          <Link to="/" className="hover:text-white transition-colors">Features</Link>
-          <Link to="/" className="hover:text-white transition-colors">Pricing</Link>
+          {navLinks.map(({ label, sectionId }) => (
+            <button
+              key={sectionId}
+              onClick={() => scrollToSection(sectionId)}
+              className="hover:text-white transition-colors cursor-pointer bg-transparent border-none p-0"
+            >
+              {label}
+            </button>
+          ))}
         </div>
         
         <div className="flex items-center gap-4">

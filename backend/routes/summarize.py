@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
-from typing import List
+from typing import List, Any
 
 router = APIRouter(tags=["Summarize"])
 
@@ -24,6 +24,27 @@ class SummarizeResponse(BaseModel):
     chapters: List[ChapterData]      # Topics with timestamps
     key_highlights: List[str]        # Top 5 important points
 
+def parse_timestamp_to_seconds(ts: Any) -> float:
+    if isinstance(ts, (int, float)):
+        return float(ts)
+    if not isinstance(ts, str):
+        return 0.0
+    # Clean up whitespace
+    ts_str = ts.strip()
+    if not ts_str:
+        return 0.0
+    parts = ts_str.split(":")
+    try:
+        if len(parts) == 1:
+            return float(parts[0])
+        elif len(parts) == 2:
+            return float(parts[0]) * 60 + float(parts[1])
+        elif len(parts) == 3:
+            return float(parts[0]) * 3600 + float(parts[1]) * 60 + float(parts[2])
+    except ValueError:
+        pass
+    return 0.0
+
 @router.post("/summarize", response_model=SummarizeResponse)
 async def summarize_transcript(request: SummarizeRequest):
     """
@@ -45,9 +66,9 @@ async def summarize_transcript(request: SummarizeRequest):
             ),
             chapters=[
                 ChapterData(
-                    topic=c.get("title", ""),
-                    start_time=float(c.get("start_time", "0.0").replace(":", ".")) if isinstance(c.get("start_time"), str) else 0.0,
-                    end_time=float(c.get("end_time", "0.0").replace(":", ".")) if isinstance(c.get("end_time"), str) else 0.0
+                    topic=c.get("title", "") or c.get("topic", "Topic"),
+                    start_time=parse_timestamp_to_seconds(c.get("start_time")),
+                    end_time=parse_timestamp_to_seconds(c.get("end_time"))
                 ) for c in data.get("chapters", [])
             ],
             key_highlights=data.get("key_highlights", [])
